@@ -11,7 +11,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 use crate::air::AgeProofAir;
-use crate::config::{Val, stark_config};
+use crate::config::{MyStarkConfig, Val, stark_config};
 use crate::generation::generate_age_proof_trace;
 
 fn main() {
@@ -70,13 +70,19 @@ fn run_age_proof(year_of_birth: u32, current_year: u32) {
     println!("  Generating STARK proof...");
     let proof = prove(&config, &AgeProofAir, trace, &pis);
 
-    // Serialize to see proof size
+    // Serialize the proof (this is what gets sent to the blockchain)
     let proof_bytes = postcard::to_allocvec(&proof).unwrap();
     println!("  Proof size: {} bytes", proof_bytes.len());
 
-    // Verify proof
-    println!("  Verifying proof...");
-    verify(&config, &AgeProofAir, &proof, &pis).expect("Verification failed!");
+    // === VERIFIER SIDE ===
+    // Deserialize and verify (simulates what the verifier does with on-chain bytes)
+    let deserialized_proof: p3_uni_stark::Proof<MyStarkConfig> =
+        postcard::from_bytes(&proof_bytes).expect("Deserialization failed!");
+
+    println!("  Verifying deserialized proof...");
+    let verifier_config = stark_config();
+    verify(&verifier_config, &AgeProofAir, &deserialized_proof, &pis)
+        .expect("Verification failed!");
 
     println!("  VERIFIED: age >= 18 = {is_adult} (without revealing year of birth!)");
 }
